@@ -39,7 +39,6 @@ def correctness_tester1():
         # select on columns with index
         test_table.index.create_index(2)
         result = reorganize_result(query.select(1, 2, [1,1,1,1,1]))
-        print(result[0].columns)
         if len(result) == 4:
             if records[0] in result and records[1] in result and records[5] in result and records[7] in result:
                 print("PASS[0]")
@@ -100,6 +99,7 @@ def correctness_tester1():
         # update that changes primary key,
         query.update(7, *[8,2,2,2,2])
         result = reorganize_result(query.select(7, 0, [1,1,1,1,1]))
+        print(result)
         if len(result) == 0:
             print("PASS[5]")
         else:
@@ -356,6 +356,7 @@ def merging_tester():
             time += 1
             for key in keys:
                 query.select(key, 0, [1,1,1,1,1])
+    db.close()
 
 from timeit import default_timer as timer
 from decimal import Decimal
@@ -365,7 +366,7 @@ import glob
 import traceback
 import shutil   
 
-m2tests = [1,0,0]
+m2tests = [1,1,1]
 if m2tests[0] == 1:
     print("==========correctness tester===============")
     correctness_tester1() 

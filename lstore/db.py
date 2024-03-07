@@ -159,13 +159,6 @@ class Database():
         page_table_entries = []
         for table_name in self.tables.keys():
             table = self.tables[table_name]
-
-            #flush meta data
-            folder_path = f"{self.path}/{table_name}"
-            data_rows = []
-            data_rows.append([table.num_columns, table.key])
-            self.persist_table_metadata(folder_path, data_rows)
-
             
             for rid in table.page_directory.keys():
                 rid_data = table.page_directory[rid]
@@ -212,6 +205,13 @@ class Database():
     def create_table(self, name, num_columns, key_index, folder_path="./",pr=4):
         table = Table(name, num_columns, key_index, folder_path=self.path, pr=pr)
         self.tables[name] = table
+
+        folder_path = f"{self.path}/{name}"
+        data_rows = []
+        data_rows.append([table.num_columns, table.key])
+        self.persist_table_metadata(folder_path, data_rows)
+        
+
         return table
 
     

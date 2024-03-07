@@ -56,11 +56,14 @@ class Bufferpool():
     '''
     def return_to_pool(self, page_id, change):
         
-        self.bufferpool[page_id][1] -= 1 # Reduce transaction count
+        self.bufferpool[page_id][2] -= 1 # Reduce transaction count
 
         if change == True:
             self.bufferpool[page_id][1] = 1 # If changes have occurred, set dirty bit to 1
         if page_id not in self.queue: self.queue.append(page_id)
+        else: 
+            self.queue.remove(page_id)
+            self.queue.append(page_id)
         
     '''
     Takes a page_id and will load page, or page is already in bufferpool and returns page (array of byte arrays)
@@ -69,7 +72,6 @@ class Bufferpool():
     def retrieve_page(self, page_id):
         
         # Page already in bufferpool
-        #print(type(page_id))
         if page_id in self.bufferpool:
             self.bufferpool[page_id][2] += 1
             return self.bufferpool[page_id][0], page_id
@@ -111,7 +113,7 @@ class Bufferpool():
         
         page_id_to_eject = self.queue[0]
         # Page is dirty and must be flushed
-        if self.bufferpool[page_id_to_eject][1] == 1:
+        if self.bufferpool[page_id_to_eject][1] == 1 or self.bufferpool[page_id_to_eject][1] == 0:
             pages_dir_name = f"{self.path}/{self.table_name}/pages"
             in_memory_pages = self.bufferpool[page_id_to_eject][0]
             for i in range(self.num_columns + 4):
@@ -125,26 +127,12 @@ class Bufferpool():
                     file.write(data)
         # Page is clean 
         else:
-            ''' nothing'''
-            '''
-            pages_dir_name = f"{self.path}/{self.table_name}/pages"
-            in_memory_pages = self.bufferpool[page_id_to_eject][0]
-            for i in range(self.num_columns + 4):
-                data = in_memory_pages[i].data
-                file_name = f"{i}_{page_id_to_eject}.dat"
-                isExist = os.path.exists(f"{pages_dir_name}")
-                if not isExist:
-                    os.makedirs(pages_dir_name)
-                if not os.path.exists(f"{pages_dir_name}/{file_name}"):
-                    with open(f"{pages_dir_name}/{i}_{page_id_to_eject}.dat", 'wb') as file:
-                        file.write(data)
-            '''
             pass
         del self.bufferpool[page_id_to_eject]
         return self.queue.pop(0)
 
     def flush_all(self):
-
+        
         while len(self.queue) > 0:
             self.eject()
         

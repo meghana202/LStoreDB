@@ -102,14 +102,13 @@ class Query:
             self.table.index.create_index(search_key_index)
 
         rids = self.table.index.locate(search_key_index, search_key)
-        print(rids)
 
         records = []
-        record_vals = [None]*self.table.num_columns
         level = 0
         original_tail = -1
 
         for rid in rids:
+            record_vals = [None]*self.table.num_columns
             address = self.table.get_page_directory_entry(rid)
             pages, record_num = address[0][0], address[1]
 
@@ -117,10 +116,9 @@ class Query:
             if indirection == -1: return False
             if original_tail == -1:
                 original_tail = indirection
-            #print (f"Len address:{len(address)}, address:{address}, indirection:{indirection}")
+
             if indirection == 0 or (len(address[0]) == 4 and address[0][3] == indirection): # No updates made
-                #print(f"NOT traversing lineage:{level}")
-                # Or indirection = TPS
+
                 for i, val in enumerate(projected_columns_index):
                     if val == 1:
                         record_vals[i] = pages[i+4].read(record_num)
@@ -128,21 +126,19 @@ class Query:
                 record_vals = [val for val in record_vals if val is not None]
                 record_to_append= Record(rid, search_key, record_vals)
                 records.append(record_to_append)
-            else: # Must traverse the lineage
-                #print(f"traversing lineage:{level}")
+            else: 
+
                 level += 1
                 
                 MRTP = pages[0].read(record_num) #Most Recent Tail Page
                 self.bufferpool.return_to_pool(address[0][1], False)
                 while True:
-                    #address_tail = self.table.page_directory[MRTP]
+
                     address_tail = self.table.get_page_directory_entry(MRTP)
                     pages_tail, record_num_tail = address_tail[0][0], address_tail[1]
                     indirection = pages_tail[0].read(record_num_tail)
-                    #SE = pages_tail[3].read(record_num_tail)
-                    #SEbit = list(format(SE, '0{}b'.format(self.table.num_columns)))
+
                     for i in range(len(pages_tail)-4):
-                        #if SEbit[i] == '1' and projected_columns_index[i] == 1 and record_vals[i] == None:
                         if projected_columns_index[i] == 1 and record_vals[i] == None:
                             if pages_tail[i+4].read(record_num_tail) != -1:
                                 record_vals[i] = pages_tail[i+4].read(record_num_tail)
@@ -158,10 +154,7 @@ class Query:
                         self.bufferpool.return_to_pool(address_tail[0][1], False)
                         break
          
-        #print(f"record.column:{records[0].columns}")
-        #print(f"indirection on select is {original_tail}")
-        #print ("")
-        return records, original_tail #list
+        return records, original_tail 
         pass
     
     """
@@ -175,7 +168,10 @@ class Query:
         if primary_key not in self.table.index.indices[self.table.key]:
             return False # Invalid Key 
         
-        if columns[self.table.key] != primary_key and columns[self.table.key] != None: return False
+        if columns[self.table.key] != primary_key and columns[self.table.key] != None: 
+            self.delete(primary_key)
+            self.insert(*columns)
+            return True
     
         column = self.table.key
         base_rid = self.table.index.locate(column, primary_key)[0]#self.keys[primary_key] # Get RID
@@ -193,8 +189,8 @@ class Query:
             if len(first_update_loc[0]) > 2:
                 if first_update_loc[0][2] == True:
                     page_range = first_update_loc[0][3]
-                    merge = threading.Thread(target=self.__merge, args=(page_range,))
-                    merge.start()
+                    #merge = threading.Thread(target=self.__merge, args=(page_range,))
+                    #merge.start()
                     #self.__merge(page_range)
 
             page1, record_num1 = first_update_loc[0][0], first_update_loc[0][1]
@@ -224,8 +220,8 @@ class Query:
         if len(update_loc[0]) > 2:
             if update_loc[0][2] == True:
                 page_range = update_loc[0][3]
-                merge = threading.Thread(target=self.__merge, args=(page_range,))
-                merge.start()
+                #merge = threading.Thread(target=self.__merge, args=(page_range,))
+                #merge.start()
         
         page, record_num = update_loc[0][0], update_loc[0][1]
         pid1 = update_loc[1]
@@ -239,7 +235,6 @@ class Query:
 
         for i in range(4, len(columns)+4):
             value = -1 if columns[i-4] is None else columns[i-4]
-            #print(page)
             page[i].write(value)
         
         base_indirection.rewrite(self.page_range.rid, record_num_base) # Base points to new tail 
@@ -296,6 +291,7 @@ class Query:
     
 
     def my_merge(self, page_range):
+        print("merge starting")
         deallocate_queue = []
         current_thread = threading.current_thread()
 
@@ -311,46 +307,103 @@ class Query:
 
             merged_rids = []
             for i in reversed(range(0, 512)):
-                relevant_pages = []
+                relevant_pages = {}
                 rid = tail_page[1].read(i)
                 rid_data = self.table.get_page_directory_entry(rid)
                 brid = rid_data[3]
                 base_rid_data = self.table.get_page_directory_entry(brid)
+                pid = self.table.page_directory[brid][0]
                 base_pages = base_rid_data[0][0]
                 if base_pages[0].has_capacity():
                     continue
-
-                relevant_pages.append(copy.deepcopy(base_pages))
+                
+                if pid not in relevant_pages.keys():
+                    relevant_pages[pid] = copy.deepcopy(base_pages)
                  
                 if brid not in merged_rids:
                     merged_rids.append(brid)
                 else:
                     continue
+            
+            for brid in merged_rids:
+                pid, offset = self.table.page_directory[brid][0], self.table.get_page_directory_entry(brid)[1]
 
-                keypage, offset = self.table.get_page_directory_entry(brid)[0][0][self.table.key+4], self.table.get_page_directory_entry(brid)[1]
-
-                keyval = keypage.read(offset)
+                # get location on deepcopied relevant base pages
+                if pid not in relevant_pages.keys(): 
+                    continue # update to a not fully commited BP record
+                relevant_page = relevant_pages[pid]
+                keyval = relevant_page[4+self.table.key].read(offset)
                 columns = [1]*self.table.num_columns
-                new_record_data, tps = self.select2(keyval, self.table.key, columns)
-                new_record = new_record_data[0].columns
+                new_record_data, tps = self.merge_select(brid, relevant_page, offset,  tail_page)
+                new_record = new_record_data[0]
+                if relevant_page[self.table.key +4].read(offset) == keyval and relevant_page[0].read(offset) != -1:
+                    for j in range(len(columns)):
+                        relevant_page[j+4].rewrite(new_record[j], offset)
+                        PageFactory().set_page(relevant_page[j+4].get_name(), relevant_page[j+4])
+                else:
+                    #print (f"Not match reading value:{page[self.table.key +4].read(offset)}, keyval:{keyval}, page[0].read(offset):{page[0].read(offset)}")
+                    continue
 
-                for i in range(len(relevant_pages)):
-                    tpage = relevant_pages[i]
-                    if tpage[self.table.key +4].read(offset) == keyval and tpage[0].read(offset) != -1:
-                        for j in range(len(columns)):
-                            tpage[j+4].rewrite(new_record[j], offset)
-                            PageFactory().set_page(tpage[j+4].get_name(), tpage[j+4])
-                    else:
-                        #print (f"Not match reading value:{page[self.table.key +4].read(offset)}, keyval:{keyval}, page[0].read(offset):{page[0].read(offset)}")
-                        continue
+                page = self.table.get_page_directory_entry(brid)[0][0]
+                pid = self.table.get_page_directory_entry(brid)[0][1]
+                new_pages = page[:4] + relevant_page[4:]
 
-                    page = self.table.get_page_directory_entry(brid)[0][0]
-                    pid = self.table.get_page_directory_entry(brid)[0][1]
-                    new_pages = page[:4] + relevant_pages[i][4:]
+                self.table.update_page_directory_entry(brid, [pid, offset, True, tps])
+                self.bufferpool.return_to_pool(pid, True)
+                deallocate_queue.append(page)
+    
+    def merge_select(self, rid,  relevant_base_page, record_num, tail_page):
+        records = []
+        level = 0
+        original_tail = -1
+        projected_columns_index = [1]*self.table.num_columns
 
-                    self.table.update_page_directory_entry(brid, [pid, offset, True, tps])
-                    self.bufferpool.return_to_pool(pid, True)
-                    deallocate_queue.append(keypage)
+        record_vals = [None]*self.table.num_columns
+        address = self.table.get_page_directory_entry(rid)
+        pages = relevant_base_page
+
+        indirection = pages[0].read(record_num)
+        if indirection == -1: return False
+        if original_tail == -1:
+            original_tail = indirection
+
+        if indirection == 0 or (len(address[0]) == 4 and address[0][3] == indirection): # No updates made
+
+            for i, val in enumerate(projected_columns_index):
+                if val == 1:
+                    record_vals[i] = pages[i+4].read(record_num)
+
+            record_vals = [val for val in record_vals if val is not None]
+            record_to_append= record_vals
+            records.append(record_to_append)
+        else: 
+
+            level += 1
+                
+            MRTP = pages[0].read(record_num) #Most Recent Tail Page
+            while True:
+
+                address_tail = self.table.get_page_directory_entry(MRTP)
+                pages_tail, record_num_tail = address_tail[0][0], address_tail[1]
+                indirection = pages_tail[0].read(record_num_tail)
+
+                for i in range(len(pages_tail)-4):
+                    if projected_columns_index[i] == 1 and record_vals[i] == None:
+                         if pages_tail[i+4].read(record_num_tail) != -1:
+                            record_vals[i] = pages_tail[i+4].read(record_num_tail)
+                MRTP = indirection
+                if MRTP == 0 or (len(address[0]) == 4 and MRTP == address[0][3]):
+                    for i, val in enumerate(projected_columns_index):
+                        if projected_columns_index[i] == 1:
+                            if record_vals[i] == None:
+                                record_vals[i] = pages[i+4].read(record_num)
+                    record_vals = [val for val in record_vals if val is not None]
+                    record_to_append = record_vals
+                    records.append(record_to_append)
+                    break
+         
+        return records, original_tail 
+        pass
 
     
     """
