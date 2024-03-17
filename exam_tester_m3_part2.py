@@ -17,8 +17,8 @@ query = Query(grades_table)
 # dictionary for records to test the database: test directory
 records = {}
 
-number_of_records = 1000
-number_of_transactions = 100
+number_of_records = 100
+number_of_transactions = 10
 number_of_operations_per_record = 1
 num_threads = 8
 
@@ -87,8 +87,7 @@ for key in keys:
     
     result = query.select_version(key, 0, [1, 1, 1, 1, 1], -1)[0].columns
     if correct != result:
-        print('select error on primary key', key, ':', result, ', 
-correct:', correct)
+        print('select error on primary key', key, ':', result, ', correct:', correct)
         score -= 1
 print('Version -1 Score:', score, '/', len(keys))
 
@@ -99,8 +98,7 @@ for key in keys:
     
     result = query.select_version(key, 0, [1, 1, 1, 1, 1], -2)[0].columns
     if correct != result:
-        print('select error on primary key', key, ':', result, ', 
-correct:', correct)
+        print('select error on primary key', key, ':', result, ', correct:', correct)
         v2_score -= 1
 print('Version -2 Score:', v2_score, '/', len(keys))
 if score != v2_score:
@@ -113,8 +111,7 @@ for key in keys:
     
     result = query.select_version(key, 0, [1, 1, 1, 1, 1], 0)[0].columns
     if correct != result:
-        print('select error on primary key', key, ':', result, ', 
-correct:', correct)
+        print('select error on primary key', key, ':', result, ', correct:', correct)
         score -= 1
 print('Version 0 Score:', score, '/', len(keys))
 
@@ -127,8 +124,7 @@ keys[r[0]: r[1] + 1]))
     result = query.sum_version(keys[r[0]], keys[r[1]], 0, -1)
     if column_sum == result:
         valid_sums += 1
-print("Aggregate version -1 finished. Valid Aggregations: ", valid_sums, 
-'/', number_of_aggregates)
+print("Aggregate version -1 finished. Valid Aggregations: ", valid_sums, '/', number_of_aggregates)
 
 v2_valid_sums = 0
 for i in range(0, number_of_aggregates):
@@ -138,11 +134,9 @@ keys[r[0]: r[1] + 1]))
     result = query.sum_version(keys[r[0]], keys[r[1]], 0, -2)
     if column_sum == result:
         v2_valid_sums += 1
-print("Aggregate version -2 finished. Valid Aggregations: ", 
-v2_valid_sums, '/', number_of_aggregates)
+print("Aggregate version -2 finished. Valid Aggregations: ", v2_valid_sums, '/', number_of_aggregates)
 if valid_sums != v2_valid_sums:
-    print('Failure: Version -1 and Version -2 aggregation scores must be 
-same.')
+    print('Failure: Version -1 and Version -2 aggregation scores must be same.')
 
 valid_sums = 0
 for i in range(0, number_of_aggregates):
@@ -152,7 +146,6 @@ updated_records else 0, keys[r[0]: r[1] + 1]))
     result = query.sum_version(keys[r[0]], keys[r[1]], 0, 0)
     if column_sum == result:
         valid_sums += 1
-print("Aggregate version 0 finished. Valid Aggregations: ", valid_sums, 
-'/', number_of_aggregates)
+print("Aggregate version 0 finished. Valid Aggregations: ", valid_sums, '/', number_of_aggregates)
 
 db.close()

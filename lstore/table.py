@@ -4,6 +4,7 @@ from time import time
 from lstore.bufferpool import Bufferpool
 import threading
 from lstore.page import PageFactory
+from lstore.wal import WriteAheadLogger
 
 INDIRECTION_COLUMN = 0
 RID_COLUMN = 1
@@ -36,8 +37,10 @@ class Table:
         self.page_directory = {}
         self.page_directory_locks = {}
         self.disk_page_mapping = {}
+        self.log = WriteAheadLogger('log.txt')
         
     def get_page_directory_entry (self, rid):
+
         new_values = []
         if rid not in self.page_directory_locks:
             self.page_directory_locks[rid] = threading.Lock()
@@ -47,7 +50,6 @@ class Table:
             pages = self.bufferpool.retrieve_page(values[0])
             new_values.extend(values)
             new_values[0] = pages
-
         return new_values 
 
     def update_page_directory_entry (self, rid, entry):

@@ -20,6 +20,13 @@ class Query:
         self.bufferpool = table.bufferpool
         self.merge_lock = threading.Lock()
         pass
+    def get_delete_lock_objs(self, primary_key):
+        Empty = []
+        if primary_key not in self.table.index.indices[self.table.key]:
+            return Empty
+        rid = self.table.index.locate(self.table.key, primary_key)[0]
+
+        return [[f"RID_{rid}", "Exclusive", "Delete"]]
 
     """
     # internal Method
@@ -47,6 +54,15 @@ class Query:
             print("Not a base page")
             return False
     
+    def get_insert_lock_objs(self, *columns):
+        Empty = []
+        if len(columns) != self.table.num_columns:
+            return Empty
+
+        if columns[self.table.key] in self.table.index.indices[self.table.key]:
+            return Empty
+
+        return [[f"INDEX_{columns[self.table.key]}", "Exclusive", "Insert"]]
     """
     # Insert a record with specified columns
     # Return True upon succesful insertion
@@ -56,9 +72,12 @@ class Query:
     def insert(self, *columns):
 
         if len(columns) != self.table.num_columns:
+            #print(f"insert: FAIL num_columns don't match")
             return False
 
-        if columns[self.table.key] in self.table.index.indices[self.table.key]: return False
+        if columns[self.table.key] in self.table.index.indices[self.table.key]: 
+            #print(f"insert: KEY already exists")
+            return False
 
         schema_encoding = int('0' * self.table.num_columns, 2)
         insert_loc, pid = self.page_range.get_insert_loc(self.table.num_columns)
@@ -75,13 +94,22 @@ class Query:
             pages[i].write(columns[i-4])
             
         # if primary key is in indices[0], append rid to mapping at index
-        if columns[self.table.key] in self.table.index.indices[self.table.key]:
-            return False
-        else:
-            self.table.index.indices[self.table.key][columns[self.table.key]] = [self.page_range.rid]
+        for i in range(len(columns)):
+            self.table.index.update_index(i, columns[i], self.page_range.rid)
+
         self.table.update_page_directory_entry(self.page_range.rid, [pid, num_records, True])
         self.bufferpool.return_to_pool(pid, True) 
         return True
+
+    def get_select_lock_objs(self, search_key, search_key_index, projected_columns_index):
+        Empty = []
+        rid_list = []
+        rids = self.table.index.locate(search_key_index, search_key)
+        if len(rids) > 0:
+            for rid in rids:
+                rid_list.append([f"RID_{rid}", "Shared", "Select"])
+            return rid_list
+        return Empty
       
     """
     # Read matching record with specified search key
@@ -125,6 +153,7 @@ class Query:
 
                 record_vals = [val for val in record_vals if val is not None]
                 record_to_append= Record(rid, search_key, record_vals)
+                self.bufferpool.return_to_pool(address[0][1], False)
                 records.append(record_to_append)
             else: 
 
@@ -151,12 +180,20 @@ class Query:
                         record_vals = [val for val in record_vals if val is not None]
                         record_to_append = Record(rid, search_key, record_vals)
                         records.append(record_to_append)
+                        #print("returned")
                         self.bufferpool.return_to_pool(address_tail[0][1], False)
                         break
-         
+        
         return records, original_tail 
         pass
     
+    def get_update_lock_objs(self, primary_key, *columns):
+        Empty = []
+        if primary_key not in self.table.index.indices[self.table.key]:
+            return Empty
+        column = self.table.key
+        base_rid = self.table.index.locate(column, primary_key)[0]#self.keys[primary_key] # Get RID
+        return [[f"RID_{base_rid}", "Exclusive", "Update"]]
     """
     # Update a record with specified key and columns
     # Returns True if update is succesful
@@ -167,11 +204,12 @@ class Query:
 
         if primary_key not in self.table.index.indices[self.table.key]:
             return False # Invalid Key 
-        
+        """ 
         if columns[self.table.key] != primary_key and columns[self.table.key] != None: 
             self.delete(primary_key)
             self.insert(*columns)
             return True
+        """
     
         column = self.table.key
         base_rid = self.table.index.locate(column, primary_key)[0]#self.keys[primary_key] # Get RID
@@ -201,8 +239,11 @@ class Query:
             page1[2].write(int(time()))
             page1[3].write(int('0'*self.table.num_columns))
 
+            previous_value = [None] * self.table.num_columns
             for i in range(4, self.table.num_columns + 4):
                 value = base_page[i].read(record_num_base)
+                if columns[i-4] != None:
+                    previous_value[i-4] = value
                 page1[i].write(value)
             
             # We must update the base page indirection column
@@ -233,8 +274,10 @@ class Query:
         page[2].write(int(time()))
         page[3].write(schema_encoding)
 
+        previous_value = [None] * self.table.num_columns
         for i in range(4, len(columns)+4):
             value = -1 if columns[i-4] is None else columns[i-4]
+            previous_value[i-4] = value
             page[i].write(value)
         
         base_indirection.rewrite(self.page_range.rid, record_num_base) # Base points to new tail 
@@ -244,6 +287,13 @@ class Query:
             if val is not None:
                 new_schema_encoding[i] = '1'
         new_schema_encoding = int(''.join(new_schema_encoding), 2)
+
+        """
+        for i in range(len(columns)):
+            if columns[i] != None:
+                self.table.index.remove_index(i, previous_value[i], base_rid)
+                self.table.index.update_index(i, columns[i], base_rid)
+        """
 
         # Update base schema encoding
         base_schema_encoding.rewrite(new_schema_encoding, record_num_base)
@@ -257,7 +307,7 @@ class Query:
     """
     :param start_range: int         # Start of the key range to aggregate 
     :param end_range: int           # End of the key range to aggregate 
-    :param aggregate_columns: int  # Index of desired column to aggregate
+    :param aggregate_columns: int  # Index of desired co lumn to aggregate
     # this function is only called on the primary key.
     # Returns the summation of the given range upon success
     # Returns False if no record exists in the given range

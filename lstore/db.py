@@ -40,6 +40,34 @@ class Database():
             return files
         except:
             return []
+    
+    def load_pr(self, path):
+        table_names = self.get_directories(self.path)
+        for table_name in table_names:
+            path += f"/{table_name}"
+            path += "/page_range.csv"
+            table = self.get_table(table_name)
+            base_pages = []
+            tail_pages = []
+            rid = 0
+
+            with open(path, mode='r') as file:
+                reader = csv.reader(file)
+                for row in reader:
+                    if row[0] == '':
+                        # Assuming the line starts with ',' followed by integers
+                        base_page = [[None, int(entry)] for entry in row if entry.isdigit()]
+                        base_pages.extend(base_page)
+                    elif row[0][0] == '[':
+                        tail_page_range = [[None, int(entry)] for entry in row if entry.isdigit()]
+                        tail_pages.append(tail_page_range)
+                    else: 
+                        rid = int(row[0])
+                
+            #print(base_pages)
+            table.page_range.rid = rid
+            table.page_range.base_pages = base_pages
+            table.page_range.tail_pages = tail_pages
 
     def open(self, path):
         
@@ -48,7 +76,7 @@ class Database():
             if not os.path.exists(path):
                 os.makedirs(path)
             return
-        
+
         table_names = self.get_directories(self.path)
         for table_name in table_names:
             table_metadata_file_name = f"{self.path}/{table_name}/metadata.csv"
@@ -57,6 +85,7 @@ class Database():
                 for row in csvreader:
                   self.create_table(table_name, int(row[0]),int(row[1]))
                   break
+        self.load_pr(path)
         
         # read page directory
         for table_name in table_names:
@@ -153,11 +182,44 @@ class Database():
         with open(csv_file_path, mode='w', newline='') as file:
             writer = csv.writer(file)
             writer.writerows(data_rows)
-        
+
+    def persist_pr(self, path):
+        for table_string in self.tables:
+            path += f"/{table_string}"
+            # Base Pages 
+            table = self.get_table(table_string)
+            base_pages = table.page_range.base_pages 
+            bp_to_write = []
+            for i in range(len(base_pages)):
+                obj = base_pages[i]
+                bp_to_write.append([None, obj[1]])
+
+            # Tail Pages 
+            tail_pages = table.page_range.tail_pages
+            tp_to_write = []
+            for j in range(len(tail_pages)):
+                new_pr = []
+                for i in range(len(tail_pages[j])):
+                    obj = tail_pages[j][i]
+                    new_pr.append([None, obj[1]])
+                tp_to_write.append(new_pr) 
+
+            csv_file_path = path + f"/page_range.csv"
+            directory = os.path.dirname(csv_file_path)
+            if not os.path.exists(directory):
+                os.makedirs(directory)
+            with open(csv_file_path, mode='w', newline='') as file:
+                writer = csv.writer(file)
+                writer.writerows(bp_to_write)
+                #print(tp_to_write)
+                writer.writerow(tp_to_write)
+                writer.writerow([table.page_range.rid])
         
     def close(self):
         page_table_entries = []
+        self.persist_pr(self.path)
         for table_name in self.tables.keys():
+            #print(f"closing {table_name}")
             table = self.tables[table_name]
             
             for rid in table.page_directory.keys():

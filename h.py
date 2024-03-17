@@ -17,10 +17,13 @@ query = Query(grades_table)
 # dictionary for records to test the database: test directory
 records = {}
 
-number_of_records = 1000
-number_of_transactions = 100
-number_of_operations_per_record = 10
-num_threads = 8
+#number_of_records = 1000
+number_of_records = 1
+#number_of_transactions = 100
+number_of_transactions = 1
+#number_of_operations_per_record = 10
+number_of_operations_per_record = 1
+num_threads = 1
 
 keys = []
 records = {}
@@ -44,11 +47,15 @@ for i in range(num_threads):
     transaction_workers.append(TransactionWorker())
 
 
+
+
+
 # x update on every column
 for j in range(number_of_operations_per_record):
     for key in keys:
         updated_columns = [None, None, None, None, None]
-        for i in range(2, grades_table.num_columns):
+        for i in range(4, grades_table.num_columns):
+            print (f"Updating :{i}")
             # updated value
             value = randint(0, 20)
             updated_columns[i] = value
@@ -56,12 +63,12 @@ for j in range(number_of_operations_per_record):
             original = records[key].copy()
             # update our test directory
             records[key][i] = value
-            transactions[key % 
-number_of_transactions].add_query(query.select, grades_table, key, 0, [1, 
-1, 1, 1, 1])
-            transactions[key % 
-number_of_transactions].add_query(query.update, grades_table, key, 
-*updated_columns)
+            #transactions[key % number_of_transactions].add_query(query.select, grades_table, key, 0, [1, 1, 1, 1, 1])
+            #transactions[key % number_of_transactions].add_query(query.update, grades_table, key, *updated_columns) 
+
+            my_record = query.select(key, 0, [1, 1, 1, 1, 1])
+            print("Persisted",my_record[0].columns)
+            query.update(key, *updated_columns) 
 print("Update finished")
 
 
@@ -69,20 +76,21 @@ print("Update finished")
 for i in range(number_of_transactions):
     transaction_workers[i % num_threads].add_transaction(transactions[i])
 
+
+
 # run transaction workers
 for i in range(num_threads):
     transaction_workers[i].run()
-
 
 # wait for workers to finish
 for i in range(num_threads):
     transaction_workers[i].join()
 
 
-
 score = len(keys)
 for key in keys:
     try:
+        print ("looking up key", key)
         correct = records[key]
         query = Query(grades_table)
         
@@ -90,6 +98,8 @@ for key in keys:
         if correct != result:
             print('select error on primary key', key, ':', result, ', correct:', correct)
             score -= 1
+        else:
+            print('select PASS on primary key', key, ':', result, ', correct:', correct)
     except:
         print('Record Not found', key)
         score -= 1

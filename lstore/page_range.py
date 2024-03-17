@@ -15,12 +15,10 @@ class Page_Range():
 
     # Insert is requested, return back base page to write to and num_records
     def get_insert_loc(self, num_cols):
-        
         # First Insert, no pages have been allocated
         # Initialize Page Range
 
         if self.base_pages == [] or (self.bufferpool.retrieve_page(self.base_pages[-1][1])[0][0].has_capacity() == False):
-
             bp, page_id = self.bufferpool.request_new_page()
             self.base_pages.append([bp, page_id])
             if len(self.base_pages) % self.page_range == 1:
@@ -43,7 +41,8 @@ class Page_Range():
         merge = False
         # tail pages = [[[tp1, tp2]], [pagerange0]]
 
-        if self.tail_pages[page_range] == [] or (self.bufferpool.retrieve_page(self.tail_pages[page_range][-1][1])[0][0].has_capacity() == False):
+        #if self.tail_pages[page_range] 
+        if self.tail_pages == [] or self.tail_pages[page_range] == [] or (self.bufferpool.retrieve_page(self.tail_pages[page_range][-1][1])[0][0].has_capacity() == False):
             # if the previous tail page is full (not empty page range set), initiate merge
             if self.tail_pages[page_range] != []:
                 merge = True

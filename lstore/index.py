@@ -9,7 +9,18 @@ class Index:
         self.indices = [None] *  table.num_columns
         self.table = table
         self.bufferpool = table.bufferpool
-
+    
+    def update_index(self, column, value, rid):
+        if self.indices[column] != None or column == self.table.key: 
+            if value in self.indices[column].keys():
+                self.indices[column][value].append(rid)
+            else:
+                self.indices[column][value] = [rid] 
+    
+    def remove_index(self, column, value, rid):
+        if self.indices[column] != None:
+            if value in self.indices[column].keys():
+                self.indices[column][value].remove(rid)
     """
     # returns the location of all records with the given value on column "column"
     """

@@ -55,8 +55,6 @@ for i in range(number_of_transactions):
     transaction_workers[i % 
 num_threads].add_transaction(insert_transactions[i])
 
-
-
 # run transaction workers
 for i in range(num_threads):
     transaction_workers[i].run()
@@ -67,7 +65,6 @@ for i in range(num_threads):
 
 
 # Check inserted records using select query in the main thread outside 
-workers
 for key in keys:
     record = query.select(key, 0, [1, 1, 1, 1, 1])[0]
     error = False
@@ -75,8 +72,7 @@ for key in keys:
         if column != records[key][i]:
             error = True
     if error:
-        print('select error on', key, ':', record, ', correct:', 
-records[key])
+        print('select error on', key, ':', record, ', correct:', records[key])
     else:
         pass
         # print('select on', key, ':', record)

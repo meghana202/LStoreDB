@@ -1,6 +1,7 @@
 from lstore.page import Page
 from lstore.durable_page_id import DurablePageIDGenerator
 import os
+import struct
 
 '''
 Once transaction has ended Query can modify queue and buffpool directly 
@@ -99,6 +100,7 @@ class Bufferpool():
             column, page_id = tokens[0], tokens[1]
             p = Page (column, page_id)
             with open(pages_dir_name + "/" + page_name, 'rb') as file:
+                p.num_records = struct.unpack('I', file.read(4))[0]
                 # Read the first 4096 bytes
                 tmp_bytes = file.read(4096)
                 p.data[:len(tmp_bytes)] = tmp_bytes
@@ -117,6 +119,7 @@ class Bufferpool():
             pages_dir_name = f"{self.path}/{self.table_name}/pages"
             in_memory_pages = self.bufferpool[page_id_to_eject][0]
             for i in range(self.num_columns + 4):
+                num_records = in_memory_pages[i].num_records
                 data = in_memory_pages[i].data
                 file_name = f"{i}_{page_id_to_eject}.dat"
                 isExist = os.path.exists(pages_dir_name)
@@ -124,6 +127,7 @@ class Bufferpool():
                     # Create a new directory because it does not exist
                     os.makedirs(pages_dir_name)
                 with open(f"{pages_dir_name}/{i}_{page_id_to_eject}.dat", 'wb') as file:
+                    file.write(struct.pack('I', num_records))
                     file.write(data)
         # Page is clean 
         else:
@@ -137,6 +141,3 @@ class Bufferpool():
             self.eject()
         
         return True
-
-
-            
